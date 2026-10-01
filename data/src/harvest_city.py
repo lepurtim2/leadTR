@@ -326,12 +326,15 @@ async def harvest_city(
             norm_phone = f"+90{last10}" if last10 else (phone if phone else None)
             rating = item.get("rating")
             review_count = item.get("review_count")
+            maps_url = item.get("maps_url") or ""
 
             comp_score, lead_score, dig_score = calculate_scores(name, phone, website, address, rating)
 
             desc = f"{name} - {category_name}, {district}/{city}."
             if rating and review_count:
                 desc += f" (Google: ⭐ {rating} - {review_count} yorum)"
+            elif rating:
+                desc += f" (Google: ⭐ {rating})"
 
             row_dict = {
                 "id": f"gmaps-{uuid.uuid4().hex[:12]}",
@@ -352,7 +355,7 @@ async def harvest_city(
                 "domain": domain if domain else None,
                 "email": None,
                 "source_name": "google_maps_playwright",
-                "source_record_id": f"gmaps-{uuid.uuid4().hex[:8]}",
+                "source_record_id": maps_url if maps_url else f"gmaps-{uuid.uuid4().hex[:8]}",
                 "lead_score": lead_score,
                 "completeness_score": comp_score,
                 "digital_presence_score": dig_score,
