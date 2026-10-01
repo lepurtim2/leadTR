@@ -173,9 +173,87 @@ export class DuckDbService implements OnModuleInit {
     }
 
     if (filters.query && filters.query.trim()) {
-      const q = `%${filters.query.trim().toLowerCase()}%`;
-      conditions.push('(lower(canonical_name) LIKE ? OR lower(formatted_address) LIKE ?)');
-      params.push(q, q);
+      const rawQuery = filters.query.trim();
+      const rawTokens = rawQuery
+        .toLowerCase()
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2 && !['ve', 'ile', 'veya', 'bir', 'için', 'icin'].includes(t));
+
+      if (rawTokens.length > 1) {
+        // Multi-word smart search: match each word across name, category, district, and address
+        const tokenConditions: string[] = [];
+        for (const rawToken of rawTokens) {
+          let token = rawToken;
+          if (token.endsWith('ajansı') || token.endsWith('ajansi')) {
+            token = 'ajans';
+          } else if (token.endsWith('klinikleri') || token.endsWith('klinigi') || token.endsWith('kliniği')) {
+            token = 'klinik';
+          } else if (token.endsWith('doktoru') || token.endsWith('hekimi')) {
+            token = token.slice(0, -1);
+          }
+
+          const normToken = token
+            .replace(/ı/g, 'i')
+            .replace(/ğ/g, 'g')
+            .replace(/ü/g, 'u')
+            .replace(/ş/g, 's')
+            .replace(/ö/g, 'o')
+            .replace(/ç/g, 'c');
+
+          tokenConditions.push(`(
+            lower(canonical_name) LIKE ?
+            OR lower(category_name) LIKE ?
+            OR lower(district) LIKE ?
+            OR lower(district_normalized) LIKE ?
+            OR lower(province) LIKE ?
+            OR lower(formatted_address) LIKE ?
+            OR lower(automated_description) LIKE ?
+            OR replace(replace(replace(replace(replace(replace(lower(canonical_name), 'ı', 'i'), 'ğ', 'g'), 'ü', 'u'), 'ş', 's'), 'ö', 'o'), 'ç', 'c') LIKE ?
+            OR replace(replace(replace(replace(replace(replace(lower(formatted_address), 'ı', 'i'), 'ğ', 'g'), 'ü', 'u'), 'ş', 's'), 'ö', 'o'), 'ç', 'c') LIKE ?
+          )`);
+          params.push(
+            `%${token}%`,
+            `%${token}%`,
+            `%${token}%`,
+            `%${normToken}%`,
+            `%${token}%`,
+            `%${token}%`,
+            `%${token}%`,
+            `%${normToken}%`,
+            `%${normToken}%`
+          );
+        }
+        conditions.push(`(${tokenConditions.join(' AND ')})`);
+      } else {
+        const normQ = rawQuery
+          .toLowerCase()
+          .replace(/ı/g, 'i')
+          .replace(/ğ/g, 'g')
+          .replace(/ü/g, 'u')
+          .replace(/ş/g, 's')
+          .replace(/ö/g, 'o')
+          .replace(/ç/g, 'c');
+
+        conditions.push(`(
+          lower(canonical_name) LIKE ?
+          OR lower(category_name) LIKE ?
+          OR lower(district) LIKE ?
+          OR lower(formatted_address) LIKE ?
+          OR lower(automated_description) LIKE ?
+          OR replace(replace(replace(replace(replace(replace(lower(canonical_name), 'ı', 'i'), 'ğ', 'g'), 'ü', 'u'), 'ş', 's'), 'ö', 'o'), 'ç', 'c') LIKE ?
+          OR replace(replace(replace(replace(replace(replace(lower(formatted_address), 'ı', 'i'), 'ğ', 'g'), 'ü', 'u'), 'ş', 's'), 'ö', 'o'), 'ç', 'c') LIKE ?
+        )`);
+        params.push(
+          `%${rawQuery.toLowerCase()}%`,
+          `%${rawQuery.toLowerCase()}%`,
+          `%${rawQuery.toLowerCase()}%`,
+          `%${rawQuery.toLowerCase()}%`,
+          `%${rawQuery.toLowerCase()}%`,
+          `%${normQ}%`,
+          `%${normQ}%`
+        );
+      }
     }
 
     if (filters.province && filters.province.trim()) {
