@@ -1,0 +1,24 @@
+{
+  "name": "leadtr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Türkiye Business Data Platform",
+  "scripts": {
+    "dev:web": "pnpm --filter @leadtr/web dev",
+    "dev:api": "pnpm --filter @leadtr/api dev",
+    "build:web": "pnpm --filter @leadtr/web build",
+    "build:api": "pnpm --filter @leadtr/api build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @leadtr/database generate",
+    "db:migrate": "pnpm --filter @leadtr/database migrate",
+    "db:studio": "pnpm --filter @leadtr/database studio",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

@@ -1,0 +1,6 @@
+polars>=1.0.0
+duckdb>=1.0.0
+pyarrow>=17.0.0
+requests>=2.32.0
+pydantic>=2.8.0
+pytest>=8.0.0

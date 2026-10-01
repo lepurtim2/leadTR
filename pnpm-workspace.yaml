@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'workers/*'
+
+allowBuilds:
+  '@nestjs/core': true
+  duckdb: true
+  esbuild: true
