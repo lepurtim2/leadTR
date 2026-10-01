@@ -56,6 +56,11 @@ data/raw/
 data/exports/
 *.parquet
 *.arrow
+*.pbf
+*.rar
+*.jsonl
+*.xlsx
+scratch/
 
 # Secrets
 *.pem

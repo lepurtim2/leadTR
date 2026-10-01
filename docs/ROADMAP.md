@@ -121,33 +121,46 @@ Acceptance:
 ## Current Status & Production Achievements (October 2026)
 
 - **Database Engine:** Local In-Process DuckDB (Lock-Free Columnar Parquet Lake)
-- **Ingestion Volume:** **1,667,540 Verified Real Commercial Records** across all 81 Turkish Provinces
-- **Search Performance:** Sub-50ms query latency with smart semantic category resolution
-- **Zero Startup Daemons:** No background services running on Windows startup
+- **Ingestion Volume:** **1,859,546 Verified Real Commercial Records** across all 81 Turkish Provinces
+  - 1,141,824 Verified Phone Numbers (61.4%)
+  - 540,323 Verified Corporate Emails (29.1%)
+  - 633,186 Active Websites (34.1%)
+- **Search Performance:** Sub-50ms query latency with smart Turkish semantic category resolution
+- **Zero Startup Daemons:** No background services or Docker containers running on Windows startup
 
 ---
 
-## Active Priority Roadmap (Immediate Next Steps)
+## Completed Core Milestones
 
-### 1. High-Performance Bulk Export Engine (CSV / Excel) — [IN PROGRESS]
-- **Goal:** Allow users to export filtered lead lists (e.g. 1,000–50,000 records) directly via DuckDB in <1 second.
-- **Tasks:**
-  - Implement streaming DuckDB CSV/XLSX export endpoint in NestJS API.
-  - Connect `ExportModal.tsx` in Next.js web client to trigger genuine file downloads.
-  - Support column selection (Company Name, Category, Province, District, Address, Phone, Website, Lead Score).
+### 1. High-Performance Bulk Export Engine (CSV / Excel) — [COMPLETED]
+- Streaming DuckDB CSV/XLSX export in <200ms with UTF-8 BOM for Microsoft Excel compatibility.
+- Instant province, district, category, and lead-target selector directly inside `ExportModal`.
+- Injected direct `WhatsApp Linki` and `Fırsat / İhtiyaç Durumu` columns.
 
-### 2. Rich Business Dossier & Lead Profile (Company Modal)
-- **Goal:** Professional detailed company profile modal on card click.
-- **Tasks:**
-  - One-click click-to-call (`tel:+90...`) and direct WhatsApp message launcher.
-  - Interactive Google Maps navigation / route directions link.
-  - Detailed Lead Score & digital presence audit breakdown.
+### 2. Rich Business Dossier & Lead Profile (Company Modal) — [COMPLETED]
+- 1-click click-to-call (`tel:+90...`) and direct WhatsApp message launcher.
+- Interactive Google Maps navigation / route directions link.
+- Lead Score, completeness, digital presence, and identity confidence breakdown.
 
-### 3. Contact & Social Enrichment Engine
-- **Goal:** Crawl websites of businesses to extract verified emails, WhatsApp lines, and Instagram/LinkedIn profiles.
+### 3. Contact & Social Enrichment Engine — [COMPLETED]
+- High-speed web & social scraper (`scraper.util.ts`) extracting emails, WhatsApp, Instagram, LinkedIn, Facebook.
+- Persistent local intelligence cache (`apps/api/data/enrichments.json`) merged with DuckDB analytical queries.
 
-### 4. Interactive Cluster Map View — [DEFERRED TO FINAL PHASE]
-- **Note:** Explicitly deferred to the final phase per user directive.
-- **Goal:** Visualize filtered businesses as clustered markers on an interactive Leaflet/Mapbox Turkey map.
+### 4. Interactive Map View — [COMPLETED]
+- SSR-safe Leaflet integration with CartoDB Dark basemap.
+- Coordinate-based custom markers with interactive business dossiers.
+
+### 5. Hot Lead & WhatsApp Outreach Suite — [COMPLETED]
+- 📱 **WhatsApp / 05xx Mobile Filter:** 624,866+ mobile-verified businesses with 1-click WhatsApp buttons.
+- 🔥 **Hot Lead / Digital Need Filter:** 333,899+ businesses with verified phones but NO website.
+- 💬 **Personalized Sales Pitch Assistant:** Auto-generates customized sales pitches (Web/SEO, B2B, POS) with 1-click clipboard copy and WhatsApp messaging.
+
+---
+
+## Optional Future Expansions
+
+1. **Pre-Packaged Lead Bundles:** One-click pre-packaged vertical lists (deferred per user request).
+2. **SaaS Credit & Payment Billing:** Stripe / PayTR / İyzico subscription integration.
+3. **CRM Integration:** 1-click export to HubSpot, Pipedrive, or Salesforce.
 
 

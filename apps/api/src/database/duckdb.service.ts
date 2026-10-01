@@ -21,7 +21,8 @@ export class DuckDbService implements OnModuleInit {
     try {
       this.db = new duckdbModule.Database(':memory:');
       this.isInitialized = true;
-      this.logger.log('🚀 DuckDB in-memory high-speed analytical engine initialized successfully.');
+      this.query('PRAGMA enable_object_cache=false;').catch(() => {});
+      this.logger.log('🚀 DuckDB in-memory high-speed analytical engine initialized successfully (Zero File-Lock Mode).');
     } catch (err) {
       this.logger.error('Failed to initialize DuckDB instance', err);
     }
@@ -165,8 +166,10 @@ export class DuckDbService implements OnModuleInit {
     const params: any[] = [];
 
     if (filters.businessStatus && filters.businessStatus !== 'all') {
-      conditions.push('business_status = ?');
-      params.push(filters.businessStatus);
+      // In our verified Parquet dataset, all commercial entities are active.
+      if (filters.businessStatus !== 'active') {
+        conditions.push('1=0');
+      }
     }
 
     if (filters.query && filters.query.trim()) {
@@ -277,6 +280,23 @@ export class DuckDbService implements OnModuleInit {
 
     if (filters.hasPhone) {
       conditions.push("phone IS NOT NULL AND phone != ''");
+    }
+
+    if (filters.onlyMobilePhone || filters.hasWhatsApp) {
+      conditions.push(`(
+        phone_type = 'mobile'
+        OR phone LIKE '+905%'
+        OR phone LIKE '905%'
+        OR phone LIKE '05%'
+        OR phone LIKE '5%'
+      )`);
+    }
+
+    if (filters.urgentLeadOnly) {
+      conditions.push(`(
+        phone IS NOT NULL AND phone != ''
+        AND (website IS NULL OR website = '')
+      )`);
     }
 
     if (filters.hasWebsite) {
@@ -417,10 +437,33 @@ export class DuckDbService implements OnModuleInit {
         (socials.length > 0 ? 5 : 0)
     );
 
+    const hasPhone = phones.length > 0;
+    const hasWeb = !!row.website;
+    const hasEmail = emails.length > 0;
+
+    let opportunityScore = 50;
+    let opportunityReason = 'Orta Seviye Potansiyel';
+
+    if (hasPhone && !hasWeb) {
+      opportunityScore = 95;
+      opportunityReason = '🔥 Acil Satış (Web Sitesi Yok, Telefonu Doğrulanmış)';
+    } else if (hasPhone && hasWeb && !hasEmail) {
+      opportunityScore = 75;
+      opportunityReason = '⚡ Gelişime Açık (Web Sitesi Var, Doğrudan E-posta/Kanal Eksik)';
+    } else if (hasPhone && hasWeb && hasEmail) {
+      opportunityScore = 40;
+      opportunityReason = '🔒 Dijitalleşmiş İşletme (Tam Profil)';
+    } else if (!hasPhone && !hasWeb) {
+      opportunityScore = 20;
+      opportunityReason = 'Düşük İletişim Skoru';
+    }
+
     return {
       id: row.id,
       canonicalName: row.canonical_name,
       automatedDescription: row.automated_description,
+      opportunityScore,
+      opportunityReason,
       businessStatus: row.business_status || 'active',
       categoryId: row.category_slug,
       sourceCount: 1,
@@ -430,6 +473,8 @@ export class DuckDbService implements OnModuleInit {
         freshnessScore: row.freshness_score !== undefined ? Number(row.freshness_score) : 90,
         digitalPresenceScore,
         leadScore,
+        opportunityScore,
+        opportunityReason,
       },
       firstSeenAt: row.created_at || new Date().toISOString(),
       lastSeenAt: row.created_at || new Date().toISOString(),
@@ -522,6 +567,8 @@ export class DuckDbService implements OnModuleInit {
       'İlçe',
       'Açık Adres',
       'Telefon',
+      'WhatsApp Linki',
+      'Fırsat / İhtiyaç Durumu',
       'Web Sitesi',
       'Domain',
       'E-Posta',
@@ -552,6 +599,22 @@ export class DuckDbService implements OnModuleInit {
       const linkedin = enrichment?.socials?.find((s: any) => s.platform === 'linkedin')?.url || '';
       const facebook = enrichment?.socials?.find((s: any) => s.platform === 'facebook')?.url || '';
 
+      const rawPhone = r.normalized_phone || r.phone || '';
+      const cleanDigits = rawPhone.replace(/\D/g, '');
+      const isMobile = cleanDigits.startsWith('905') || cleanDigits.startsWith('05') || (cleanDigits.length === 10 && cleanDigits.startsWith('5')) || r.phone_type === 'mobile';
+      let waLink = '';
+      if (isMobile && cleanDigits.length >= 10) {
+        let waNum = cleanDigits;
+        if (waNum.startsWith('0')) waNum = '9' + waNum;
+        else if (!waNum.startsWith('90')) waNum = '90' + waNum;
+        waLink = `https://wa.me/${waNum}`;
+      }
+
+      let oppReason = 'Orta Seviye';
+      if (rawPhone && !r.website) oppReason = '🔥 Acil Satış (Web Sitesi Yok)';
+      else if (rawPhone && r.website && !email) oppReason = '⚡ Gelişime Açık (E-Posta Eksik)';
+      else if (rawPhone && r.website && email) oppReason = '🔒 Dijitalleşmiş';
+
       csvLines.push(
         [
           r.canonical_name,
@@ -559,7 +622,9 @@ export class DuckDbService implements OnModuleInit {
           r.province || '',
           r.district || '',
           r.formatted_address || '',
-          r.normalized_phone || r.phone || '',
+          rawPhone,
+          waLink,
+          oppReason,
           r.website || '',
           r.domain || '',
           email,

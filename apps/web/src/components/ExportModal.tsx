@@ -7,7 +7,6 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Database,
-  Sparkles,
   Phone,
   Globe,
   Check,
@@ -15,6 +14,8 @@ import {
   MapPin,
   Building2,
   Search,
+  MessageCircle,
+  Zap,
 } from 'lucide-react';
 import { TURKISH_PROVINCES, getDistrictsForProvince } from '@leadtr/validation';
 
@@ -25,6 +26,8 @@ export interface ExportFilters {
   categorySlug?: string;
   minLeadScore?: number;
   hasPhoneOnly?: boolean;
+  onlyMobilePhone?: boolean;
+  urgentLeadOnly?: boolean;
   hasWebsiteOnly?: boolean;
   hasNoWebsiteOnly?: boolean;
   sortBy?: string;
@@ -38,7 +41,7 @@ interface ExportModalProps {
   filters?: ExportFilters;
 }
 
-type LeadTargetOption = 'all' | 'phone_no_web' | 'both' | 'phone_only';
+type LeadTargetOption = 'all' | 'whatsapp_mobile' | 'phone_no_web' | 'both' | 'phone_only';
 
 const CATEGORY_OPTIONS = [
   { slug: '', label: 'Tüm Sektörler & Kategoriler' },
@@ -88,13 +91,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const [format, setFormat] = useState<'csv' | 'xlsx'>('csv');
 
-  // Interactive Target Region & Category State
   const [targetProvince, setTargetProvince] = useState<string>(filters.province || '');
   const [targetDistrict, setTargetDistrict] = useState<string>(filters.district || '');
   const [targetCategory, setTargetCategory] = useState<string>(filters.categorySlug || '');
   const [targetQuery, setTargetQuery] = useState<string>(filters.query || '');
 
-  // Determine initial lead target from incoming filters
   const initialTarget: LeadTargetOption =
     filters.hasPhoneOnly && filters.hasNoWebsiteOnly
       ? 'phone_no_web'
@@ -116,6 +117,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+  const inputClass = 'w-full px-3 py-1.5 text-small bg-panel border border-border rounded-card text-foreground focus:outline-none focus:border-accent cursor-pointer transition-colors';
+
   // Synchronize state when modal opens or incoming filters change
   useEffect(() => {
     if (isOpen) {
@@ -123,7 +126,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       setTargetDistrict(filters.district || '');
       setTargetCategory(filters.categorySlug || '');
       setTargetQuery(filters.query || '');
-      if (filters.hasPhoneOnly && filters.hasNoWebsiteOnly) {
+      if (filters.onlyMobilePhone) {
+        setLeadTarget('whatsapp_mobile');
+      } else if (filters.urgentLeadOnly || (filters.hasPhoneOnly && filters.hasNoWebsiteOnly)) {
         setLeadTarget('phone_no_web');
       } else if (filters.hasPhoneOnly && filters.hasWebsiteOnly) {
         setLeadTarget('both');
@@ -131,9 +136,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         setLeadTarget('phone_only');
       }
     }
-  }, [isOpen, filters.province, filters.district, filters.categorySlug, filters.query, filters.hasPhoneOnly, filters.hasWebsiteOnly, filters.hasNoWebsiteOnly]);
+  }, [
+    isOpen,
+    filters.province,
+    filters.district,
+    filters.categorySlug,
+    filters.query,
+    filters.onlyMobilePhone,
+    filters.urgentLeadOnly,
+    filters.hasPhoneOnly,
+    filters.hasWebsiteOnly,
+    filters.hasNoWebsiteOnly,
+  ]);
 
-  // Recalculate DuckDB live count dynamically whenever filters change
+  // Recalculate DuckDB live count dynamically
   useEffect(() => {
     let isMounted = true;
     const timer = setTimeout(async () => {
@@ -147,7 +163,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         if (targetCategory && targetCategory.trim()) params.set('categorySlug', targetCategory.trim());
         if (filters.minLeadScore && filters.minLeadScore > 0) params.set('minLeadScore', String(filters.minLeadScore));
 
-        if (leadTarget === 'phone_no_web') {
+        if (leadTarget === 'whatsapp_mobile') {
+          params.set('onlyMobilePhone', 'true');
+          params.set('hasWhatsApp', 'true');
+        } else if (leadTarget === 'phone_no_web') {
+          params.set('urgentLeadOnly', 'true');
           params.set('hasPhone', 'true');
           params.set('hasNoWebsite', 'true');
         } else if (leadTarget === 'both') {
@@ -212,8 +232,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     if (filters.minLeadScore && filters.minLeadScore > 0) params.set('minLeadScore', String(filters.minLeadScore));
     if (filters.sortBy) params.set('sortBy', filters.sortBy);
 
-    // Apply active leadTarget override
-    if (leadTarget === 'phone_no_web') {
+    if (leadTarget === 'whatsapp_mobile') {
+      params.set('onlyMobilePhone', 'true');
+      params.set('hasWhatsApp', 'true');
+    } else if (leadTarget === 'phone_no_web') {
+      params.set('urgentLeadOnly', 'true');
       params.set('hasPhone', 'true');
       params.set('hasNoWebsite', 'true');
     } else if (leadTarget === 'both') {
@@ -232,7 +255,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
     const downloadUrl = `${API_BASE}/api/v1/exports/download?${params.toString()}`;
 
-    // Clean descriptive filename
     const dateStr = new Date().toISOString().slice(0, 10);
     const parts = ['leadtr'];
     if (targetProvince) parts.push(targetProvince.toLowerCase());
@@ -241,7 +263,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     parts.push(dateStr);
     const filename = `${parts.join('_')}.${format === 'csv' ? 'csv' : 'xlsx'}`;
 
-    // Trigger instant browser file download
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.setAttribute('download', filename);
@@ -268,79 +289,117 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const currentPopularDistricts = targetProvince ? POPULAR_DISTRICTS[targetProvince.toLowerCase()] || [] : [];
   const availableDistricts = targetProvince ? getDistrictsForProvince(targetProvince) : [];
 
+  const LEAD_TARGETS = [
+    {
+      id: 'whatsapp_mobile' as LeadTargetOption,
+      label: '📱 WhatsApp / Mobil (05xx)',
+      desc: 'Doğrudan WhatsApp mesajı atılabilir 05xx cep numaraları',
+      icon: MessageCircle,
+      color: 'positive',
+    },
+    {
+      id: 'phone_no_web' as LeadTargetOption,
+      label: '🔥 Sıcak Lead (Web Sitesiz)',
+      desc: 'Web sitesi olmayan, web ajansları ve SEO için sıcak leadler',
+      icon: Zap,
+      color: 'warning',
+    },
+    {
+      id: 'both' as LeadTargetOption,
+      label: 'Telefonlu & Web siteli',
+      desc: 'Dijital varlığı olan, kurumsal hizmet hedefleri',
+      icon: Globe,
+      color: 'accent',
+    },
+    {
+      id: 'phone_only' as LeadTargetOption,
+      label: 'Sadece Telefon Doğrulanmış',
+      desc: 'Çağrı merkezi ve telefon satış aramaları',
+      icon: Phone,
+      color: 'positive',
+    },
+    {
+      id: 'all' as LeadTargetOption,
+      label: 'Tüm Kayıtlar',
+      desc: 'Seçili bölge ve sektördeki tüm işletmeler',
+      icon: Database,
+      color: 'muted',
+    },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70"
+      onClick={onClose}
+    >
       <div
-        className="glass-panel w-full max-w-2xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl p-5 sm:p-7 relative max-h-[94vh] overflow-y-auto"
+        className="w-full max-w-2xl rounded-modal border border-border bg-panel shadow-2xl p-5 sm:p-6 relative max-h-[94vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-card bg-surface text-muted hover:text-foreground transition-colors"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-3 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-            <Download className="w-6 h-6" />
+          <div className="p-2.5 rounded-card bg-accent-muted text-accent">
+            <Download className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white">Toplu Lead Dışa Aktar</h3>
-            <p className="text-xs text-slate-400">
-              Hedef bölge, ilçe ve kategoriye göre filtrelenmiş verileri Excel/CSV olarak indirin
+            <h3 className="text-[18px] font-bold text-foreground">Toplu lead dışa aktar</h3>
+            <p className="text-small text-muted">
+              Hedef bölge, ilçe ve kategoriye göre filtrelenmiş verileri indirin
             </p>
           </div>
         </div>
 
         {isSuccess ? (
-          <div className="text-center py-6 space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="text-center py-6 space-y-3">
+            <div className="w-14 h-14 rounded-full bg-positive/15 border border-positive/30 text-positive flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-7 h-7" />
             </div>
             <div>
-              <h4 className="text-lg font-bold text-white">İndirme Tamamlandı!</h4>
-              <p className="text-xs text-slate-300 mt-1">
-                <span className="text-cyan-400 font-bold">{downloadedCount.toLocaleString('tr-TR')}</span> adet firma kaydı UTF-8 Türkçe Excel uyumlu dosya olarak bilgisayarınıza aktarıldı.
+              <h4 className="text-section text-foreground">İndirme tamamlandı</h4>
+              <p className="text-small text-muted mt-1">
+                <span className="text-accent font-semibold">{downloadedCount.toLocaleString('tr-TR')}</span> firma kaydı bilgisayarınıza aktarıldı.
               </p>
-              <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 inline-flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Harcanan Kredi: <strong className="text-white">{Math.ceil(downloadedCount / 10)} Kredi</strong></span>
-              </div>
+              <p className="text-[10px] text-muted mt-2">
+                Harcanan: <span className="text-foreground font-medium">{Math.ceil(downloadedCount / 10)} Kredi</span>
+              </p>
             </div>
-            <div className="pt-2">
-              <button
-                onClick={onClose}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-xs transition-all shadow-lg shadow-cyan-500/20"
-              >
-                Tamam
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="px-5 py-2 rounded-card bg-accent hover:bg-accent-hover text-white font-medium text-[13px] transition-colors"
+            >
+              Tamam
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* ── 1. Target Region, District & Category Controls ── */}
-            <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-cyan-400" /> Hedef Bölge, İlçe & Sektör Seçimi
+            {/* 1. Target Region */}
+            <div className="p-3 rounded-card bg-surface border border-border space-y-2.5">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <span className="text-small font-semibold text-foreground flex items-center gap-1.5">
+                  <MapPin className="w-3 h-3 text-muted" /> Hedef bölge ve sektör
                 </span>
-                <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                  <Database className="w-3 h-3" /> DuckDB Motoru
+                <span className="text-[10px] text-muted font-mono flex items-center gap-1">
+                  <Database className="w-2.5 h-2.5" /> DuckDB
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* İl (Province) Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {/* Province */}
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1">İl (Şehir)</label>
+                  <label className="block text-[10px] font-medium text-muted mb-0.5">İl</label>
                   <select
                     value={targetProvince}
                     onChange={(e) => {
                       setTargetProvince(e.target.value);
-                      setTargetDistrict(''); // Reset district on province change
+                      setTargetDistrict('');
                     }}
-                    className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    className={inputClass}
                   >
                     <option value="">Tüm Türkiye (81 İl)</option>
                     {TURKISH_PROVINCES.map((p) => (
@@ -351,15 +410,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   </select>
                 </div>
 
-                {/* İlçe (District) Dropdown Selector */}
+                {/* District */}
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1 flex items-center justify-between">
-                    <span>İlçe Seçimi</span>
+                  <label className="block text-[10px] font-medium text-muted mb-0.5 flex items-center justify-between">
+                    <span>İlçe</span>
                     {targetDistrict && (
                       <button
                         type="button"
                         onClick={() => setTargetDistrict('')}
-                        className="text-[10px] text-cyan-400 hover:underline"
+                        className="text-[10px] text-accent hover:text-accent-hover"
                       >
                         Tümü
                       </button>
@@ -369,10 +428,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     value={targetDistrict}
                     onChange={(e) => setTargetDistrict(e.target.value)}
                     disabled={!targetProvince}
-                    className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-400 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`${inputClass} disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
                     <option value="">
-                      {targetProvince ? 'Tüm İlçeler' : 'Önce İl Seçiniz'}
+                      {targetProvince ? 'Tüm İlçeler' : 'Önce İl Seçin'}
                     </option>
                     {availableDistricts.map((d) => (
                       <option key={d} value={d}>
@@ -382,15 +441,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   </select>
                 </div>
 
-                {/* Kategori (Category) Selector */}
+                {/* Category */}
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 text-slate-400" /> Sektör / Kategori
+                  <label className="block text-[10px] font-medium text-muted mb-0.5 flex items-center gap-1">
+                    <Building2 className="w-2.5 h-2.5" /> Sektör
                   </label>
                   <select
                     value={targetCategory}
                     onChange={(e) => setTargetCategory(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    className={inputClass}
                   >
                     {CATEGORY_OPTIONS.map((c) => (
                       <option key={c.slug} value={c.slug}>
@@ -403,17 +462,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
               {/* Quick District Chips */}
               {currentPopularDistricts.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-slate-500">Popüler İlçeler:</span>
+                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                  <span className="text-[10px] text-muted">Popüler:</span>
                   {currentPopularDistricts.map((d) => (
                     <button
                       key={d}
                       type="button"
                       onClick={() => setTargetDistrict(d)}
-                      className={`text-[10px] px-2 py-0.5 rounded-md border transition-all ${
+                      className={`text-[10px] px-1.5 py-0.5 rounded-card border transition-colors ${
                         targetDistrict.toLowerCase() === d.toLowerCase()
-                          ? 'border-cyan-500 bg-cyan-500/20 text-cyan-300 font-semibold'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white hover:border-slate-700'
+                          ? 'border-accent bg-accent-muted text-accent font-medium'
+                          : 'border-border bg-surface text-muted hover:text-foreground hover:border-border-hover'
                       }`}
                     >
                       {d}
@@ -423,128 +482,66 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               )}
 
               {/* Optional Query */}
-              <div className="relative pt-1">
-                <Search className="absolute left-3 top-3.5 w-3.5 h-3.5 text-slate-500" />
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 w-3 h-3 text-muted" />
                 <input
                   type="text"
                   value={targetQuery}
                   onChange={(e) => setTargetQuery(e.target.value)}
-                  placeholder="İsteğe bağlı ek arama terimi (Örn: Pilates, Crossfit, Kebap, Dent...)"
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-900/80 border border-slate-800 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-cyan-400"
+                  placeholder="Ek arama terimi (Pilates, Crossfit, Kebap…)"
+                  className={`${inputClass} pl-7`}
                 />
               </div>
             </div>
 
-            {/* ── 2. Lead Targeting Options ── */}
+            {/* 2. Lead Targeting */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
-                <span>Dışa Aktarma İletişim Filtresi</span>
-                <span className="text-[11px] font-mono font-bold text-cyan-400">
+              <label className="block text-small font-semibold text-foreground mb-1.5 flex items-center justify-between">
+                <span>İletişim filtresi</span>
+                <span className="text-small font-medium text-accent">
                   {isCounting ? (
-                    <span className="animate-pulse">DuckDB Taranıyor...</span>
+                    <span className="animate-pulse">Sayılıyor…</span>
                   ) : (
-                    `${liveCount.toLocaleString('tr-TR')} Firma Bulundu`
+                    `${liveCount.toLocaleString('tr-TR')} firma`
                   )}
                 </span>
               </label>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {/* Option 1: Phone + No Website */}
-                <button
-                  type="button"
-                  onClick={() => setLeadTarget('phone_no_web')}
-                  className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
-                    leadTarget === 'phone_no_web'
-                      ? 'border-amber-500/80 bg-amber-500/10 shadow-sm ring-1 ring-amber-500/30'
-                      : 'border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${leadTarget === 'phone_no_web' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Telefonlu & Web Sitesiz</span>
-                      {leadTarget === 'phone_no_web' && <Check className="w-3 h-3 text-amber-400" />}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Web tasarım ve dijital ajans leadleri</p>
-                  </div>
-                </button>
-
-                {/* Option 2: Both Phone & Website */}
-                <button
-                  type="button"
-                  onClick={() => setLeadTarget('both')}
-                  className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
-                    leadTarget === 'both'
-                      ? 'border-cyan-500/80 bg-cyan-500/10 shadow-sm ring-1 ring-cyan-500/30'
-                      : 'border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${leadTarget === 'both' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Hem Telefon Hem Web</span>
-                      {leadTarget === 'both' && <Check className="w-3 h-3 text-cyan-400" />}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Eksiksiz tam iletişim profilleri</p>
-                  </div>
-                </button>
-
-                {/* Option 3: Phone Only */}
-                <button
-                  type="button"
-                  onClick={() => setLeadTarget('phone_only')}
-                  className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
-                    leadTarget === 'phone_only'
-                      ? 'border-emerald-500/80 bg-emerald-500/10 shadow-sm ring-1 ring-emerald-500/30'
-                      : 'border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${leadTarget === 'phone_only' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Phone className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Sadece Telefonu Olanlar</span>
-                      {leadTarget === 'phone_only' && <Check className="w-3 h-3 text-emerald-400" />}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Doğrudan aranabilir tüm firmalar</p>
-                  </div>
-                </button>
-
-                {/* Option 4: All Filtered */}
-                <button
-                  type="button"
-                  onClick={() => setLeadTarget('all')}
-                  className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
-                    leadTarget === 'all'
-                      ? 'border-indigo-500/80 bg-indigo-500/10 shadow-sm ring-1 ring-indigo-500/30'
-                      : 'border-slate-800 bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${leadTarget === 'all' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Filter className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Tüm Kayıtlar</span>
-                      {leadTarget === 'all' && <Check className="w-3 h-3 text-indigo-400" />}
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Filtredeki tüm işletmeler</p>
-                  </div>
-                </button>
+                {LEAD_TARGETS.map((target) => {
+                  const Icon = target.icon;
+                  const isSelected = leadTarget === target.id;
+                  return (
+                    <button
+                      key={target.id}
+                      type="button"
+                      onClick={() => setLeadTarget(target.id)}
+                      className={`p-2.5 rounded-card border text-left transition-colors flex items-start gap-2 ${
+                        isSelected
+                          ? 'border-accent bg-accent-muted'
+                          : 'border-border bg-surface hover:border-border-hover text-muted hover:text-foreground'
+                      }`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isSelected ? 'text-accent' : 'text-muted'}`} />
+                      <div>
+                        <div className="text-small font-medium text-foreground flex items-center gap-1">
+                          <span>{target.label}</span>
+                          {isSelected && <Check className="w-3 h-3 text-accent" />}
+                        </div>
+                        <p className="text-[10px] text-muted mt-0.5">{target.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* ── 3. Record Count Selector ── */}
+            {/* 3. Record Count */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-300">İndirilecek Kayıt Adedi</label>
-                <span className="text-xs text-cyan-400 font-mono font-bold">
-                  {effectiveMax.toLocaleString('tr-TR')} Firma
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-small font-semibold text-foreground">Kayıt adedi</label>
+                <span className="text-small text-accent font-medium">
+                  {effectiveMax.toLocaleString('tr-TR')} firma
                 </span>
               </div>
               <div className="grid grid-cols-5 gap-1.5">
@@ -554,10 +551,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <button
                       key={preset.label}
                       onClick={() => setRecordCount(preset.value)}
-                      className={`py-2 px-1 text-center rounded-lg border text-xs font-medium transition-all ${
+                      className={`py-1.5 px-1 text-center rounded-card border text-small font-medium transition-colors ${
                         isSelected
-                          ? 'border-cyan-500 bg-cyan-500/20 text-white font-bold'
-                          : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:text-white hover:bg-slate-800'
+                          ? 'border-accent bg-accent-muted text-accent font-semibold'
+                          : 'border-border bg-surface text-muted hover:text-foreground hover:border-border-hover'
                       }`}
                     >
                       {preset.label}
@@ -567,62 +564,62 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
             </div>
 
-            {/* ── 4. Format Selection ── */}
+            {/* 4. Format Selection */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Dosya Biçimi</label>
+              <label className="block text-small font-semibold text-foreground mb-1">Dosya biçimi</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: 'csv', label: 'CSV (Excel Uyumlu)', desc: 'UTF-8 BOM ile doğrudan Excelde açılır' },
-                  { id: 'xlsx', label: 'Excel Tablosu', desc: 'Tüm sütunlar düzenlenmiş format' },
+                  { id: 'csv', label: 'CSV (Excel Uyumlu)', desc: 'UTF-8 BOM ile Excelde açılır' },
+                  { id: 'xlsx', label: 'Excel Tablosu', desc: 'Sütunlar düzenlenmiş format' },
                 ].map((f) => {
                   const isSelected = format === f.id;
                   return (
                     <button
                       key={f.id}
                       onClick={() => setFormat(f.id as any)}
-                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
+                      className={`p-2.5 rounded-card border text-left flex items-center justify-between transition-colors ${
                         isSelected
-                          ? 'border-cyan-500 bg-cyan-500/10 text-white shadow-sm'
-                          : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:text-white hover:bg-slate-800'
+                          ? 'border-accent bg-accent-muted'
+                          : 'border-border bg-surface hover:border-border-hover text-muted hover:text-foreground'
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <FileSpreadsheet className={`w-4 h-4 ${isSelected ? 'text-cyan-400' : 'text-slate-500'}`} />
+                        <FileSpreadsheet className={`w-3.5 h-3.5 ${isSelected ? 'text-accent' : 'text-muted'}`} />
                         <div>
-                          <span className="text-xs font-bold block">{f.label}</span>
-                          <span className="text-[10px] text-slate-500">{f.desc}</span>
+                          <span className="text-small font-medium text-foreground block">{f.label}</span>
+                          <span className="text-[10px] text-muted">{f.desc}</span>
                         </div>
                       </div>
-                      {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                      {isSelected && <Check className="w-3 h-3 text-accent" />}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* ── 5. Credit Cost Preview ── */}
-            <div className="p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Gereken B2B Kredisi:</span>
-              <span className="font-mono font-bold text-amber-400">
-                {creditCost} Kredi <span className="text-[10px] text-slate-500 font-normal">(10 lead = 1 kredi)</span>
+            {/* 5. Credit Cost */}
+            <div className="p-2 rounded-card bg-surface border border-border flex items-center justify-between text-small">
+              <span className="text-muted">Gereken kredi:</span>
+              <span className="font-medium text-warning">
+                {creditCost} Kredi <span className="text-[10px] text-muted font-normal">(10 lead = 1 kredi)</span>
               </span>
             </div>
 
-            {/* ── 6. Download Button ── */}
+            {/* 6. Download Button */}
             <button
               onClick={handleExport}
               disabled={isExporting || effectiveMax === 0}
-              className="w-full py-3.5 rounded-xl font-bold text-xs bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3 rounded-card font-semibold text-[13px] bg-accent hover:bg-accent-hover text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               {isExporting ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Hazırlanıyor & İndiriliyor...</span>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Hazırlanıyor…</span>
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  <span>Listeyi İndir ({effectiveMax.toLocaleString('tr-TR')} Firma)</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Listeyi indir ({effectiveMax.toLocaleString('tr-TR')} firma)</span>
                 </>
               )}
             </button>

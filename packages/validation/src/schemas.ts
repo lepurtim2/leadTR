@@ -20,6 +20,9 @@ export const searchFiltersSchema = z.object({
   hasEmail: z.coerce.boolean().optional(),
   hasWebsite: z.coerce.boolean().optional(),
   hasNoWebsite: z.coerce.boolean().optional(),
+  hasWhatsApp: z.coerce.boolean().optional(),
+  onlyMobilePhone: z.coerce.boolean().optional(),
+  urgentLeadOnly: z.coerce.boolean().optional(),
   hasSocial: z.coerce.boolean().optional(),
   hasInstagram: z.coerce.boolean().optional(),
   businessStatus: z.enum(['active', 'closed', 'unknown', 'all']).default('active'),
@@ -29,7 +32,7 @@ export const searchFiltersSchema = z.object({
   sortBy: z.enum(['leadScore', 'freshnessScore', 'name', 'createdAt', 'distance']).default('leadScore'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(2500).default(20),
 });
 
 export type SearchFiltersInput = z.infer<typeof searchFiltersSchema>;

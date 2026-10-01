@@ -91,12 +91,16 @@ export interface BusinessScores {
   freshnessScore?: number | null;
   digitalPresenceScore?: number | null;
   leadScore?: number | null;
+  opportunityScore?: number | null;
+  opportunityReason?: string | null;
 }
 
 export interface BusinessDTO {
   id: string;
   canonicalName: string;
   automatedDescription?: string | null;
+  opportunityScore?: number | null;
+  opportunityReason?: string | null;
   businessStatus: 'active' | 'closed' | 'unknown' | string;
   categoryId?: string | null;
   category?: BusinessCategoryDTO | null;
@@ -126,6 +130,10 @@ export interface SearchFilters {
   hasPhone?: boolean;
   hasEmail?: boolean;
   hasWebsite?: boolean;
+  hasNoWebsite?: boolean;
+  hasWhatsApp?: boolean;
+  onlyMobilePhone?: boolean;
+  urgentLeadOnly?: boolean;
   hasSocial?: boolean;
   hasInstagram?: boolean;
   businessStatus?: string;

@@ -30,39 +30,30 @@ API key storage should use hashing or another safe storage design so the raw sec
 GET /api/v1/businesses
 ```
 
-Potential parameters:
+Supported query parameters:
 
 ```text
-q
-category
-subcategory
-province
-district
-neighborhood
-postal_code
-min_rating
-min_review_count
-has_website
-has_email
-has_phone
-has_whatsapp
-has_instagram
-has_booking
-business_status
-min_quality_score
-min_lead_score
-bbox
-lat
-lon
-radius
-page_size
-cursor
+query: string              (Canonical name, address, keywords)
+province: string           (Turkish province, e.g. istanbul, ankara, izmir)
+district: string           (Turkish district, e.g. kadikoy, cankaya)
+categorySlug: string       (dis-klinigi, spor-salonu, emlak-ofisi, etc.)
+minLeadScore: number       (0 - 100)
+hasPhone: boolean          (Filter businesses with verified phone)
+onlyMobilePhone: boolean   (Filter 05xx Turkish mobile numbers)
+hasWhatsApp: boolean       (Filter WhatsApp-compatible mobile numbers)
+urgentLeadOnly: boolean    (Filter hot leads: verified phone + NO website)
+hasWebsite: boolean        (Filter businesses with active website)
+hasNoWebsite: boolean      (Filter businesses without website)
+hasEmail: boolean          (Filter businesses with corporate email)
+sortBy: string             ('leadScore' | 'name' | 'createdAt')
+page: number               (1-based page index)
+limit: number              (Page limit, default 18, max 100)
 ```
 
 Example:
 
-```text
-GET /api/v1/businesses?category=dentist&province=istanbul&district=kadikoy&has_booking=false&min_rating=4.3
+```bash
+curl "http://localhost:4000/api/v1/businesses?province=istanbul&district=sisli&onlyMobilePhone=true&urgentLeadOnly=true"
 ```
 
 ## 4. Business detail
@@ -72,17 +63,17 @@ GET /api/v1/businesses/:id
 ```
 
 Return:
-- canonical business identity
-- categories
-- locations
-- business contacts according to product permissions
-- website
-- social links
-- business attributes
-- quality signals
-- freshness metadata
-
-Do not expose raw source payloads by default.
+- `id`: UUID
+- `canonicalName`: Verified trade name
+- `opportunityScore`: Lead conversion score (95 = Hot, 75 = Growing, 40 = Digitized)
+- `opportunityReason`: Plain-text rationale for outreach
+- `category`: Category object with name and slug
+- `locations`: Array of validated coordinates and addresses
+- `phones`: Normalized Turkish phone numbers with phoneType (`mobile` / `landline`)
+- `websites`: Clean domain and URL metadata
+- `emails`: Direct corporate emails
+- `socials`: Instagram, LinkedIn, Facebook, YouTube handles
+- `scores`: Lead score, completeness, digital presence, identity confidence
 
 ## 5. Search count
 
@@ -90,24 +81,36 @@ Do not expose raw source payloads by default.
 GET /api/v1/businesses/count
 ```
 
-Useful for UI filter previews.
+Accepts all search filter query parameters. Computes live aggregate count directly against DuckDB parquet storage in ~20-40ms.
 
-Must have rate limits because count queries can be expensive.
-
-## 6. Export
-
-### Create export
+## 6. Live Web & Social Enrichment
 
 ```http
-POST /api/v1/exports
+POST /api/v1/enrichment/:businessId
 ```
 
-Payload contains the saved query/filter definition.
+Crawls the business's website in real time, extracting emails, WhatsApp numbers, and social media handles. Persists results to `apps/api/data/enrichments.json` and updates the in-memory DuckDB cache.
 
-Response:
+```http
+POST /api/v1/enrichment/scrape/direct
+Body: { "url": "https://example.com" }
+```
 
-```json
-{
+Direct scraper utility endpoint for arbitrary web addresses.
+
+## 7. Bulk Lead Export
+
+```http
+GET /api/v1/exports/download
+```
+
+Query parameters:
+- All search filter parameters (`province`, `district`, `categorySlug`, `onlyMobilePhone`, `urgentLeadOnly`, etc.)
+- `format`: `'csv'` (with UTF-8 BOM for Excel) or `'xlsx'`
+- `maxRecords`: Number of records to export (e.g. 100, 1000, 50000)
+
+Exported columns:
+`Firma Adı`, `Kategori`, `İl`, `İlçe`, `Açık Adres`, `Telefon`, `WhatsApp Linki`, `Fırsat / İhtiyaç Durumu`, `Web Sitesi`, `Domain`, `E-Posta`, `Instagram`, `LinkedIn`, `Facebook`, `Lead Skoru`, `Doluluk Skoru`, `Dijital Varlık Skoru`, `Enlem`, `Boylam`, `Veri Kaynağı`.
   "id": "export_id",
   "status": "queued"
 }

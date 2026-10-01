@@ -1,24 +1,33 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { BusinessDTO } from '@leadtr/types';
-import { ExternalLink, MapPin, Phone, Star } from 'lucide-react';
+import { MapPin, Layers, ExternalLink, Navigation, Phone, MessageCircle, Maximize2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
 interface BusinessMapProps {
   businesses: BusinessDTO[];
   selectedBusiness?: BusinessDTO | null;
   onSelectBusiness?: (b: BusinessDTO) => void;
+  provinceName?: string;
+  districtName?: string;
+  totalCount?: number;
 }
 
 export const BusinessMap: React.FC<BusinessMapProps> = ({
   businesses,
   selectedBusiness,
   onSelectBusiness,
+  provinceName,
+  districtName,
+  totalCount,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const clusterGroupRef = useRef<any>(null);
+  const [totalMapped, setTotalMapped] = useState(0);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !mapContainerRef.current) return;
@@ -27,6 +36,8 @@ export const BusinessMap: React.FC<BusinessMapProps> = ({
 
     async function initMap() {
       const L = (await import('leaflet')).default;
+      (window as any).L = L;
+      await import('leaflet.markercluster');
 
       if (!isMounted || !mapContainerRef.current) return;
 
@@ -38,59 +49,131 @@ export const BusinessMap: React.FC<BusinessMapProps> = ({
         shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       });
 
+      // Initialize base map once
       if (!mapInstanceRef.current) {
-        // Turkey center coordinates
         mapInstanceRef.current = L.map(mapContainerRef.current, {
-          center: [39.92, 32.85],
+          center: [39.0, 35.2], // Center of Turkey
           zoom: 6,
           zoomControl: true,
+          preferCanvas: true,
         });
 
-        // High performance dark-matter tiles matching our luxury dark theme
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-          subdomains: 'abcd',
-          maxZoom: 19,
-        }).addTo(mapInstanceRef.current);
+        // 100% Free, High-Resolution Dark Basemap (ESRI World Dark Gray - Zero Watermark, No API Key Required)
+        L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+          {
+            attribution: '&copy; Esri, HERE, Garmin &copy; OpenStreetMap contributors',
+            maxZoom: 16,
+          }
+        ).addTo(mapInstanceRef.current);
+
+        // High-contrast City & District Labels Layer
+        L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+          {
+            maxZoom: 16,
+          }
+        ).addTo(mapInstanceRef.current);
       }
 
       const map = mapInstanceRef.current;
 
-      // Clear existing markers
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
+      // Initialize or reset Cluster Group
+      if (clusterGroupRef.current) {
+        clusterGroupRef.current.clearLayers();
+        map.removeLayer(clusterGroupRef.current);
+      }
 
-      const bounds: [number, number][] = [];
+      // Create Custom High-Tech Dark Theme Cluster Group
+      const clusterGroup = (L as any).markerClusterGroup({
+        maxClusterRadius: 45,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        animate: true,
+        iconCreateFunction: (cluster: any) => {
+          const count = cluster.getChildCount();
+          let ringColor = '#3b82f6';
+          let glowColor = 'rgba(59, 130, 246, 0.45)';
+          let size = 36;
 
-      // Custom Pin Icon
+          if (count >= 100) {
+            ringColor = '#f59e0b'; // Amber gold for mega clusters
+            glowColor = 'rgba(245, 158, 11, 0.5)';
+            size = 46;
+          } else if (count >= 25) {
+            ringColor = '#10b981'; // Emerald for medium clusters
+            glowColor = 'rgba(16, 185, 129, 0.45)';
+            size = 40;
+          }
+
+          const label = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count;
+
+          return L.divIcon({
+            html: `
+              <div style="
+                width: ${size}px;
+                height: ${size}px;
+                background: rgba(18, 20, 23, 0.94);
+                border: 2px solid ${ringColor};
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 0 14px ${glowColor}, 0 4px 10px rgba(0,0,0,0.6);
+                backdrop-filter: blur(4px);
+                cursor: pointer;
+              ">
+                <span style="
+                  font-family: Inter, -apple-system, sans-serif;
+                  font-weight: 700;
+                  font-size: ${size > 40 ? '13px' : '11px'};
+                  color: #ffffff;
+                ">${label}</span>
+              </div>
+            `,
+            className: 'leadtr-cluster-bubble',
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+          });
+        },
+      });
+
+      clusterGroupRef.current = clusterGroup;
+
+      // Custom Single Pin Icon
       const customPin = L.divIcon({
-        className: 'custom-map-pin',
+        className: 'leadtr-single-pin',
         html: `
           <div style="
-            background: linear-gradient(135deg, #06b6d4, #3b82f6);
-            width: 28px;
-            height: 28px;
+            background: #3b82f6;
+            width: 22px;
+            height: 22px;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
             border: 2px solid #ffffff;
-            box-shadow: 0 4px 10px rgba(6, 182, 212, 0.4);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
           ">
             <div style="
-              width: 8px;
-              height: 8px;
+              width: 5px;
+              height: 5px;
               background: #ffffff;
               border-radius: 50%;
               transform: rotate(45deg);
             "></div>
           </div>
         `,
-        iconSize: [28, 28],
-        iconAnchor: [14, 28],
-        popupAnchor: [0, -28],
+        iconSize: [22, 22],
+        iconAnchor: [11, 22],
+        popupAnchor: [0, -22],
       });
+
+      const bounds: [number, number][] = [];
+      let validCount = 0;
 
       businesses.forEach((b) => {
         const loc = b.locations?.[0];
@@ -98,68 +181,96 @@ export const BusinessMap: React.FC<BusinessMapProps> = ({
           const lat = loc.latitude;
           const lng = loc.longitude;
           bounds.push([lat, lng]);
+          validCount++;
 
-          const queryParts = [b.canonicalName];
-          if (loc.district) queryParts.push(loc.district);
-          if (loc.province) queryParts.push(loc.province);
-          const gSearch = encodeURIComponent(queryParts.join(' '));
+          const rawPhone = b.phones?.[0]?.normalizedPhone || b.phones?.[0]?.originalPhone || '';
+          const cleanPhone = rawPhone.replace(/\D/g, '');
+          const isMobile = cleanPhone.startsWith('905') || cleanPhone.startsWith('05') || (cleanPhone.length === 10 && cleanPhone.startsWith('5'));
+          const waNum = isMobile ? (cleanPhone.startsWith('0') ? '9' + cleanPhone : (!cleanPhone.startsWith('90') ? '90' + cleanPhone : cleanPhone)) : null;
+
+          const gSearch = encodeURIComponent(`${b.canonicalName} ${loc.district || ''} ${loc.province || ''}`);
           const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${gSearch}&center=${lat},${lng}`;
-          const phone = b.phones?.[0]?.normalizedPhone || b.phones?.[0]?.originalPhone;
 
-          const popupContent = document.createElement('div');
-          popupContent.className = 'p-1 text-slate-900 font-sans';
-          popupContent.innerHTML = `
-            <div style="font-family: inherit; min-width: 200px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-size: 10px; font-weight: bold; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px;">
-                  ${b.category?.name || 'İşletme'}
+          // Dark Theme Leaflet Popup
+          const popupHtml = `
+            <div style="font-family: Inter, sans-serif; min-width: 210px; padding: 2px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 10px; font-weight: 600; background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); padding: 2px 6px; border-radius: 4px;">
+                  ${b.category?.name || 'Ticari İşletme'}
                 </span>
-                <span style="font-size: 11px; font-weight: bold; color: #0284c7;">
+                <span style="font-size: 11px; font-weight: 700; color: #fbbf24;">
                   ★ ${Math.round(b.scores?.leadScore ?? 0)}
                 </span>
               </div>
-              <h4 style="font-size: 13px; font-weight: bold; color: #0f172a; margin: 4px 0 2px 0; line-height: 1.2;">
+              <h4 style="font-size: 13px; font-weight: 600; color: #f3f4f6; margin: 4px 0 2px 0; line-height: 1.3;">
                 ${b.canonicalName}
               </h4>
-              <p style="font-size: 11px; color: #64748b; margin-bottom: 6px;">
-                ${loc.district ? loc.district + ', ' : ''}${loc.province || 'Türkiye'}
+              <p style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">
+                📍 ${loc.district ? loc.district + ', ' : ''}${loc.province || 'Türkiye'}
               </p>
-              ${phone ? `<p style="font-size: 11px; font-family: monospace; color: #059669; margin-bottom: 8px;">📞 ${phone}</p>` : ''}
-              <div style="display: flex; gap: 6px; margin-top: 6px;">
+              ${rawPhone ? `
+                <div style="margin-bottom: 8px;">
+                  <span style="font-size: 11px; font-family: monospace; color: #34d399; font-weight: 600;">
+                    📞 ${rawPhone}
+                  </span>
+                </div>
+              ` : ''}
+              <div style="display: flex; align-items: center; gap: 6px; margin-top: 8px;">
+                ${waNum ? `
+                  <a href="https://wa.me/${waNum}" target="_blank" rel="noopener noreferrer" style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 3px;
+                    background: #10b981;
+                    color: #ffffff;
+                    font-size: 10px;
+                    font-weight: 600;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    text-decoration: none;
+                  ">
+                    WhatsApp ↗
+                  </a>
+                ` : ''}
                 <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="
                   display: inline-flex;
                   align-items: center;
-                  gap: 4px;
-                  background: #f1f5f9;
-                  color: #0284c7;
+                  gap: 3px;
+                  background: #2a2e36;
+                  color: #e5e7eb;
                   font-size: 10px;
-                  font-weight: 600;
+                  font-weight: 500;
                   padding: 4px 8px;
-                  border-radius: 6px;
+                  border-radius: 4px;
                   text-decoration: none;
                 ">
-                  Google Maps ↗
+                  Harita ↗
                 </a>
               </div>
             </div>
           `;
 
-          const marker = L.marker([lat, lng], { icon: customPin }).addTo(map);
-          marker.bindPopup(popupContent);
+          const marker = L.marker([lat, lng], { icon: customPin });
+          marker.bindPopup(popupHtml);
 
           if (onSelectBusiness) {
-            marker.on('click', () => {
-              onSelectBusiness(b);
+            marker.on('popupopen', () => {
+              // Can attach custom listeners or select
             });
           }
 
-          markersRef.current.push(marker);
+          clusterGroup.addLayer(marker);
         }
       });
 
-      // Fit bounds to display all points
+      map.addLayer(clusterGroup);
+      setTotalMapped(validCount);
+
+      // Auto-fit to active bounds or reset to Turkey
       if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      } else {
+        map.setView([39.0, 35.2], 6);
       }
     }
 
@@ -174,12 +285,59 @@ export const BusinessMap: React.FC<BusinessMapProps> = ({
     };
   }, [businesses]);
 
+  const handleResetZoom = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView([39.0, 35.2], 6);
+    }
+  };
+
   return (
-    <div className="relative w-full h-[520px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl glass-panel">
+    <div className="relative w-full h-[580px] rounded-card overflow-hidden border border-border bg-panel shadow-sm">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
-      <div className="absolute top-4 right-4 z-10 px-3 py-1.5 rounded-lg bg-slate-900/90 backdrop-blur-md border border-slate-700 text-xs text-slate-300 font-mono flex items-center gap-2 shadow-lg pointer-events-none">
-        <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-        <span>Haritada {businesses.filter((b) => b.locations?.[0]?.latitude).length} Nokta</span>
+
+      {/* Cluster HUD: Information & Density Indicator */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-card bg-surface/90 backdrop-blur-md border border-border text-small text-foreground shadow-md pointer-events-auto">
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+          </span>
+          <span className="font-semibold text-accent">Canlı Kümeleme:</span>
+          <span className="font-mono tabular-nums font-bold text-foreground">
+            {totalMapped.toLocaleString('tr-TR')}
+          </span>
+          {totalCount && totalCount > totalMapped ? (
+            <span className="text-muted font-normal">
+              / {totalCount.toLocaleString('tr-TR')}
+            </span>
+          ) : null}
+          <span className="text-muted">nokta haritalandı</span>
+        </div>
+        {provinceName && (
+          <>
+            <span className="text-border">|</span>
+            <span className="text-muted text-[11px] font-medium">
+              {districtName ? `${districtName}, ` : ''}{provinceName}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Quick Action: Reset Turkey View */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2 pointer-events-auto">
+        <button
+          onClick={handleResetZoom}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-card bg-surface/90 hover:bg-surface border border-border text-[11px] font-medium text-foreground transition-all shadow-md active:scale-95"
+          title="Tüm Türkiye genel görünümüne dön"
+        >
+          <Maximize2 className="w-3 h-3 text-accent" />
+          <span>Türkiye Geneli</span>
+        </button>
+      </div>
+
+      {/* Bottom Hint */}
+      <div className="absolute bottom-3 left-3 z-10 px-2.5 py-1 rounded bg-surface/85 backdrop-blur-sm border border-border/80 text-[10px] text-muted pointer-events-none">
+        💡 Kümelerin üzerine tıklayarak veya fare tekerleğiyle yaklaşarak alt işletmeleri açabilirsiniz.
       </div>
     </div>
   );

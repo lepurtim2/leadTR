@@ -1,0 +1,121 @@
+[
+  {
+    "sync_id": "sync_20261001_120059",
+    "run_at": "2026-10-01 12:00:59",
+    "status": "COMPLETED",
+    "duration_seconds": 167.48,
+    "metrics": {
+      "total_lake_records": 1885512,
+      "active_lake_records": 1885445,
+      "inactive_or_pruned_records": 67,
+      "checked_domains": 255,
+      "refreshed_active": 188,
+      "deactivated_dead_domains": 67
+    },
+    "sector_breakdown": [
+      {
+        "sector": "sector_01_istanbul_marmara_dogu.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_02_trakya.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_03_guney_marmara.parquet",
+        "checked": 15,
+        "refreshed": 10,
+        "deactivated": 5
+      },
+      {
+        "sector": "sector_04_ege_kuzey.parquet",
+        "checked": 15,
+        "refreshed": 9,
+        "deactivated": 6
+      },
+      {
+        "sector": "sector_05_ege_guney.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_06_akdeniz_bati.parquet",
+        "checked": 15,
+        "refreshed": 10,
+        "deactivated": 5
+      },
+      {
+        "sector": "sector_07_akdeniz_dogu.parquet",
+        "checked": 15,
+        "refreshed": 10,
+        "deactivated": 5
+      },
+      {
+        "sector": "sector_08_ic_anadolu_merkez.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_09_ic_anadolu_guney.parquet",
+        "checked": 15,
+        "refreshed": 12,
+        "deactivated": 3
+      },
+      {
+        "sector": "sector_10_ic_anadolu_dogu.parquet",
+        "checked": 15,
+        "refreshed": 12,
+        "deactivated": 3
+      },
+      {
+        "sector": "sector_11_guneydogu_bati.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_12_guneydogu_dogu.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_13_karadeniz_bati.parquet",
+        "checked": 15,
+        "refreshed": 13,
+        "deactivated": 2
+      },
+      {
+        "sector": "sector_14_karadeniz_orta.parquet",
+        "checked": 15,
+        "refreshed": 11,
+        "deactivated": 4
+      },
+      {
+        "sector": "sector_15_karadeniz_dogu.parquet",
+        "checked": 15,
+        "refreshed": 12,
+        "deactivated": 3
+      },
+      {
+        "sector": "sector_16_dogu_anadolu_kuzey.parquet",
+        "checked": 15,
+        "refreshed": 10,
+        "deactivated": 5
+      },
+      {
+        "sector": "sector_17_dogu_anadolu_guney.parquet",
+        "checked": 15,
+        "refreshed": 13,
+        "deactivated": 2
+      }
+    ],
+    "next_scheduled_run": "2026-10-15 03:00:00 UTC"
+  }
+]
